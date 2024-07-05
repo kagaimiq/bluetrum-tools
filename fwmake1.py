@@ -15,6 +15,9 @@ ap.add_argument('-u', '--userkey', type=anyint,
                 help='The "user key" (term may change in the future) to use for scrambling the code area'
                      ' (by default none is applied, code is scrambled using the generic way.)')
 
+ap.add_argument('-U', '--codekey', type=anyint,
+                help='Direct assignment of the code key (instead of it being derived from the user key passed with the "-u" option above)')
+
 ap.add_argument('--no-res-scramble', action='store_false', dest='scramble_res',
                 help='Do not scramble the resource region data')
 
@@ -34,10 +37,15 @@ args = ap.parse_args()
 
 ###############################################################################
 
+blocksize = 512
+
 #
 # Code scrambling key
 #
 codekey = 0
+if args.codekey is not None:
+    codekey = args.codekey
+    print(f'Using the key ${codekey:08x} (directly obtained)')
 if args.userkey is not None:
     codekey = ab_calcuserkey(args.userkey)
     print(f'Using the key ${codekey:08x} (obtained from ${args.userkey:08x})')
@@ -119,50 +127,55 @@ if hflag_scramble:
     ab_lfsr_cipher_in(contents, 0, 0x40, MAGICKEY_LVMG)
 
     # and the boot code
-    for off in range(bootoffset, bootoffset+bootsize, 512):
-        key = MAGICKEY_LVMG ^ (0x00010001 * bootcrc) ^ ((off >> 9) - 1)
-        ab_lfsr_cipher_in(contents, off, 512, key)
+    for off in range(bootoffset, bootoffset+bootsize, blocksize):
+        key = MAGICKEY_LVMG ^ (0x00010001 * bootcrc) ^ ((off // blocksize) - 1)
+        ab_lfsr_cipher_in(contents, off, blocksize, key)
 
 #
 # Put the app/res regions
 #
 
-# this looks horrible, but at least
-# it yields a byte-exact output.
 for i, (rmagic, rdata, rkey) in enumerate(regions):
     # pad to a block boundary
-    rdata += bytes(align_by(len(rdata), 512))
+    rdata += bytes(align_by(len(rdata), blocksize))
+
+    nblocks = len(rdata) // blocksize
 
     # region header
     regoff = len(contents)
-    contents += bytes(align_to(16 + 2*(len(rdata)//512), 512))
-    # region data
+    contents += bytes(16) # stub
+    # data block CRC's (padded to a block boundary)
+    crcoff = len(contents)
+    contents += bytes(align_to(2 * nblocks, blocksize) - (crcoff-regoff))
+    # region data (data is already padded to a block boundary above)
     dataoff = len(contents)
     contents += rdata
-    # additional padding
+    # additional padding in case that was a last region (to a small flash eraseblock)
     if (i+1) == len(regions):
         contents += bytes(align_by(len(contents), 4096))
 
     # fill in region table entry
-    struct.pack_into('<IIIHBB', contents, 0x40 + 0x10*i,
+    struct.pack_into('<IIIHBB', contents, 0x40 + 0x10 * i,
         regoff, len(rdata), 0, ab_crc16(contents[dataoff:]), i, rkey is not None
     )
 
     # fill in region header
     struct.pack_into('<4sIIH', contents, regoff,
-        rmagic, dataoff-regoff, len(rdata), 16
+        rmagic, dataoff-regoff, len(rdata), crcoff-regoff
     )
     struct.pack_into('<H', contents, regoff+14,
         ab_crc16(contents[regoff : regoff+14])
     )
-    for coff in range(regoff+16, dataoff, 2):
-        blki = (coff - regoff - 16) // 2
-        rboff = blki * 512
-        boff = rboff + dataoff
+
+    # fill in the block CRC's
+    for coff in range(crcoff, dataoff, 2):
+        blki = (coff - crcoff) // 2  # corresponding block index
+        rboff = blki * blocksize     # block data offset within `rdata`
+        boff = rboff + dataoff       # block data offset within `contents`
 
         if rboff < len(rdata):
             # CRC of the block
-            crc = ab_crc16(contents[boff : boff+512], blki + 1)
+            crc = ab_crc16(contents[boff : boff+blocksize], blki + 1)
         else:
             # Fill the rest to obscure the gap (I'm doing that just to have byte-exact output)
             crc = ab_crc16(contents[regoff : coff], coff)
@@ -171,10 +184,10 @@ for i, (rmagic, rdata, rkey) in enumerate(regions):
 
     # scramble blocks, if neccessary
     if rkey is not None:
-        for boff in range(dataoff, len(contents), 512):
-            blki = (boff - dataoff) // 512
-            crc, = struct.unpack_from('<H', contents, regoff + 16 + blki*2)
-            ab_lfsr_cipher_in(contents, boff, 512, rkey ^ crc)
+        for boff in range(dataoff, len(contents), blocksize):
+            blki = (boff - dataoff) // blocksize
+            crc, = struct.unpack_from('<H', contents, crcoff + blki * 2)
+            ab_lfsr_cipher_in(contents, boff, blocksize, rkey ^ crc)
 
     print(f'{rmagic.hex()} -- @{regoff:08X} / {len(rdata)} bytes')
 

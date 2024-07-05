@@ -2,12 +2,10 @@ import argparse
 import struct
 from bluetrum.magic import *
 from bluetrum.cipher import *
+from bluetrum.utils import *
 from bluetrum.crc import ab_crc16
 
 ###############################################################################
-
-def anyint(s):
-    return int(s, 0)
 
 def hexstr(s):
     return bytes.fromhex(s)
@@ -44,6 +42,8 @@ args = ap.parse_args()
 
 ###############################################################################
 
+blocksize = 512
+
 load_addr   = args.load_addr
 entry_addr  = args.entry_addr
 code_offset = args.offset
@@ -51,12 +51,12 @@ code_offset = args.offset
 if entry_addr is None:
     entry_addr = load_addr
 
-if code_offset < 0x200:
-    print('Warning: the specified code offset is below a 512-byte mark. Adjusting.')
-    code_offset = 0x200
-elif code_offset & 0x1FF:
-    print('Warning: the specified code offset is not a multiple of 512. Rounding up.')
-    code_offset += 0x200 - (code_offset & 0x1FF)
+if code_offset < blocksize:
+    print(f'Warning: the specified code offset is below a {blocksize}-byte mark. Adjusting.')
+    code_offset = blocksize
+elif code_offset % blocksize:
+    print(f'Warning: the specified code offset is not a multiple of {blocksize}. Rounding up.')
+    code_offset = align_to(code_offset, blocksize)
 
 scramb_data = (args.flags & 0x0008) == 0
 have_crcs   = (args.flags & 0x0002) == 0
@@ -108,10 +108,10 @@ if args.bootable:
         ab_lfsr_cipher_in(contents, 0, 64, MAGICKEY_LVMG)
 
         # scramble data
-        for off in range(args.offset, len(contents), 512):
+        for off in range(args.offset, len(contents), blocksize):
             ab_lfsr_cipher_in(contents,
-                            off, min(512, len(contents) - off),
-                            ((off >> 9) - 1) ^ MAGICKEY_LVMG ^ (code_crc * 0x00010001))
+                            off, min(blocksize, len(contents) - off),
+                            ((off // blocksize) - 1) ^ MAGICKEY_LVMG ^ (code_crc * 0x00010001))
 else:
     # just scramble the entire file
     ab_lfsr_cipher_in(contents, 0, len(contents), MAGICKEY_XFIL)
