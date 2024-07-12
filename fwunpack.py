@@ -14,6 +14,9 @@ def anyint(s):
 ap.add_argument('-u', '--userkey', metavar='KEY', type=anyint,
                 help='User key which is used to encrypt the main application blob')
 
+ap.add_argument('-U', '--codekey', metavar='KEY', type=anyint,
+                help='Direct assignment of the code key (instead of it being derived from the user key passed with the "-u" option above)')
+
 ap.add_argument('file', nargs='+',
                 help='Firmware file(s) to parse')
 
@@ -256,12 +259,14 @@ def parse_flash_image(data, outdir, userkey=0):
 
 ################################################################################
 
+codekey = 0
+if args.codekey is not None:
+    codekey = args.codekey
+    print(f'Using the key ${codekey:08x} (directly obtained)')
 if args.userkey is not None:
-    userkey = ab_calcuserkey(args.userkey)
-    print(f'Using userkey {args.userkey:08x} {userkey:08x}')
-else:
-    userkey = 0
-    print('No userkey specified')
+    codekey = ab_calcuserkey(args.userkey)
+    print(f'Using the key ${codekey:08x} (obtained from ${args.userkey:08x})')
+
 
 
 for fname in args.file:
@@ -276,7 +281,7 @@ for fname in args.file:
                 raise NotImplementedError('DCF parsing is not implemented yet')
             else:
                 data = bytearray(f.read())
-                parse_flash_image(data, outdir, userkey)
+                parse_flash_image(data, outdir, codekey)
 
     except Exception as e:
         print('[!]', e)
