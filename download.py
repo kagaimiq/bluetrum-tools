@@ -23,7 +23,7 @@ except ImportError:
     have_scsi = False
 
 if not have_uart and not have_scsi:
-    print('No available ways of communcating with hardware.')
+    print('No available ways to communicate with the hardware.')
     print('Install pyserial for UART or rip "scsiio" from jl-uboot-tool for USB MSC.')
     exit(1)
 
@@ -101,9 +101,6 @@ desblob = b64decode(
     "RjmQGE3v9ANEEeE+MI+jkGOyjiDSz24JQqtBIi37h5SuEYg9icX+uRWHfKMZkY02fK6IIxZwmW"
 )
 
-
-
-
 def make_cb(cmd, arg1=0, arg2=0, arg3=0):
     # just the unscrambled CB is fine for now
     return struct.pack('>BIBH', cmd, arg1, arg2, arg3)
@@ -124,8 +121,7 @@ def do_the_stuff(execcmd, blocksize, iface):
     # Change baudrate (if it's UART)
     if iface == 'uart' and args.baud != args.init_baud:
         print(f'Changing baudrate to {args.baud} baud...')
-        resp = execcmd(make_cb(0x50, arg1=args.baud, arg2=2), recv=2, switch_baud=args.baud)
-        print('response:', resp.hex())
+        execcmd(make_cb(0x50, arg1=args.baud, arg2=2), recv=2, switch_baud=args.baud)
 
     # Load blob
     data = bytearray(desblob) + b'\x00' * align_by(len(desblob), blocksize)
@@ -193,7 +189,7 @@ def do_the_stuff(execcmd, blocksize, iface):
 
                 if size <= 0:
                     if fsize is None:
-                        raise RuntimeError('Could not determine the device size because there is no info about it')
+                        raise RuntimeError('Unknown flash size')
                     size = fsize - addr
                     if size <= 0:
                         raise ValueError('Address is out of range')
@@ -208,7 +204,7 @@ def do_the_stuff(execcmd, blocksize, iface):
 
                 if size <= 0:
                     if fsize is None:
-                        raise RuntimeError('Could not determine the device size because there is no info about it')
+                        raise RuntimeError('Unknown flash size')
                     size = fsize - addr
                     if size <= 0:
                         raise ValueError('Address is out of range')
