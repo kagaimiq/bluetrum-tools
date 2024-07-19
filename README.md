@@ -14,6 +14,7 @@ It supports both the USB and UART interfaces.
 For the USB interface it depends on the `scsiio` library which I have made myself and I haven't bothered making it a proper package so if you want you can rip it off [jl-uboot-tool](https://github.com/kagaimiq/jl-uboot-tool), however getting into the USB bootloader is a much more involved task than getting into the UART bootloader so you probably won't care about that one anyway.
 
 For UART interface you just need an UART brigde and a way to mix the TX and RX signals together (this tool assumes any data sent over TX is also echoed back into RX), and possibly a way to shift the levels to 3.3v if it isn't by now.
+It depends on the `pyserial` package in order to talk with the serial port, so it must be installed for this option to become available.
 
 Then you just need to find an UART download pin (which is usually the PB3 GPIO; if your device has an USB port that is wired to the chip, it would be on the D+ pin), run the tool with an appropriate port specified, connect the UART to the chip, and then apply power to the chip.
 
