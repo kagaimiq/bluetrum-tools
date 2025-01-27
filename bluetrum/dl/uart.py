@@ -2,16 +2,20 @@ from bluetrum.crc import ab_crc16
 import time
 
 class UARTDownload:
+    # special tokens
     SYNC_TOKEN  = b'\xA5\x96\x87\x5A'   # Sync token
     SYNC_RESP   = b'\x5A\x69\x78\xA5'   # Sync response
     RESET_TOKEN = b'\xF5\xA0'           # Communication Reset token (sending sync token next to it resets the chip instead)
 
-    ACK_RESP     = 0x1E   # Acknowledge
-    NACK_RESP    = 0x2D   # Negative acknowledge
-    OKAY_RESP    = 0x3C   # this is used to indicate the chip didn't yet processed the last sent packet
-    DATA_TOKEN   = 0x4B   # Data token
-    DATA_REQUEST = 0xB4   # Request for data
-    WHAT_TOKEN   = 0xC3   # ???
+    # response tokens
+    RESP_ACK     = 0x1E   # Data packet has been accepted
+    RESP_NAK     = 0x2D   # No data available (receive); No space for data (send)
+    RESP_NYET    = 0x3C   # Data packet accepted but there is no more space for another one. (not processed yet)
+
+    # request tokens
+    DATA_TOKEN   = 0x4B   # Data token. ACK: all right, NYET: previous one hasn't been received yet, NAK: could not receive
+    DATA_REQUEST = 0xB4   # Request for data. DATA: there it is, NAK: not available
+    PING_TOKEN   = 0xC3   # Can we send more data? ACK: yes, NAK: no
 
     #------------------------------------------
 
@@ -29,13 +33,14 @@ class UARTDownload:
         self.port.write(data)
         # consume the echo back
         echo = self.port.read(len(data))
-        if len(echo) < len(data):
-            raise TimeoutError('Did not receive the echo back')
+        #if len(echo) < len(data):
+        #    raise TimeoutError('Did not receive the echo back')
         #if echo != data:
         #    raise ValueError('The echo has been corrupted')
 
     def comms_reset(self):
         self.counter = 0
+        self.ping_before_send = False
 
     def send_reset(self, hard=False):
         if not hard:
@@ -48,88 +53,129 @@ class UARTDownload:
         # this makes sense
         self.comms_reset()
 
+    def _make_token_packet(self, token):
+        # increase the counter
+        self.counter = (self.counter + 1) & 0xff
+        # make the token packet
+        return bytes([token, self.counter])
+
+    def _recv_token_packet(self):
+        # receive the token packet
+        recv = self.port_read(2)
+        # check the counter value
+        if recv[1] != self.counter:
+            return ValueError('Mismatch in the counter value of a received token ({recv[1]}) from expected ({self.counter})')
+        # return the received token value
+        return recv[0]
+
+    def _make_data_payload(self, data):
+        return len(data).to_bytes(2, 'little') + data + ab_crc16(data).to_bytes(2, 'little')
+
+    def _recv_data_payload(self):
+        # receive data length
+        size = int.from_bytes(self.port_read(2), 'little')
+        # receive data payload
+        data = self.port_read(size)
+        # receive data CRC
+        crc = int.from_bytes(self.port_read(2), 'little')
+
+        # check the received data CRC
+        if ab_crc16(data) != crc:
+            raise ValueError('Received data packet CRC mismatch')
+
+        # return the data payload
+        return data
+
     def send_packet(self, data):
-        # construct the data packet
-        self.counter = (self.counter + 1) & 0xFF
-        packet = bytes([UARTDownload.DATA_TOKEN, self.counter])
-        packet += len(data).to_bytes(2, 'little') + data + ab_crc16(data).to_bytes(2, 'little')
+        data = self._make_data_payload(data)
 
-        # try to send it   (TODO better approach)
-        llcnt = tries = 0
-        while tries < 100:
-            self.port_write(packet)
+        do_ping = self.ping_before_send
 
-            # response
-            try:
-                resp = self.port_read(2)
-            except TimeoutError:
-                # maybe a CRC error or reception failure
-                if llcnt > 10:
-                    raise TimeoutError('Link lost')
-                llcnt += 1
-                continue
-
-            llcnt = 0
-
-            if resp[1] != self.counter:
-                raise RuntimeError(f'Invalid counter value in response ({resp[1]}) vs. the packet ({packet[1]})')
-
-            if resp[0] == UARTDownload.ACK_RESP:
-                # All fine
-                return
-            elif resp[0] == UARTDownload.OKAY_RESP:
-                # Received fine, but the previous data block hasn't been processed yet.
-                return
-            elif resp[0] == UARTDownload.NACK_RESP:
-                # Failed, perhaps the chip is busy.
-                time.sleep(.2)
+        # TODO: time out, maybe?
+        while True:
+            if do_ping:
+                # send a PING token
+                packet = self._make_token_packet(UARTDownload.PING_TOKEN)
             else:
-                raise RuntimeError(f'Unexpected response token {resp[0]:02X}')
+                # send a DATA packet
+                packet = self._make_token_packet(UARTDownload.DATA_TOKEN) + data
 
-            tries += 1
+            tries = 0
+            while True:
+                self.port_write(packet)
 
-        raise TimeoutError('The chip could not accept the data block')
+                try:
+                    resp = self._recv_token_packet()
+                except TimeoutError:
+                    # maybe a reception failure or a CRC error.
+                    if tries > 10:
+                        raise TimeoutError("Could not send a data packet.")
+                    tries += 1
+                else:
+                    break
+
+            if do_ping:
+                if resp == UARTDownload.RESP_ACK:
+                    # Now we can send data.
+                    do_ping = False
+                elif resp == UARTDownload.RESP_NAK:
+                    # Not yet.
+                    pass
+                else:
+                    raise RuntimeError(f'Ping: Unexpected response token {resp:02X}')
+            else:
+                if resp == UARTDownload.RESP_ACK:
+                    # All fine
+                    self.ping_before_send = False
+                    return
+                elif resp == UARTDownload.RESP_NYET:
+                    # Received fine, but the previous data block hasn't been processed yet.
+                    self.ping_before_send = True  # better to ping it next time.
+                    return
+                elif resp == UARTDownload.RESP_NAK:
+                    # Failed, perhaps the chip is busy.
+                    do_ping = True  # start pinging.
+                else:
+                    raise RuntimeError(f'Tx: Unexpected response token {resp:02X}')
 
     def recv_packet(self):
-        # construct the data request
-        self.counter = (self.counter + 1) & 0xFF
-        request = bytes([UARTDownload.DATA_REQUEST, self.counter])
+        # the request packet needs to be sent with the same counter value
+        #  in case we need to re-request data in case of a CRC failure etc.
+        #  otherwise the chip assumes the data was received ok
+        request = self._make_token_packet(UARTDownload.DATA_REQUEST)
 
-        # try to get the data   (TODO better approach)
-        llcnt = tries = 0
-        while tries < 100:
+        tries = 0
+
+        # TODO: a timeout?
+        while True:
             self.port_write(request)
 
-            # response
             try:
-                resp = self.port_read(2)
+                resp = self._recv_token_packet()
             except TimeoutError:
                 # maybe chip didn't receive the request
-                if llcnt > 10:
-                    raise TimeoutError('Link lost')
-                llcnt += 1
+                if tries > 10:
+                    raise TimeoutError("Could not request a data packet.")
+                tries += 1
                 continue
-
-            llcnt = 0
-
-            if resp[1] != self.counter:
-                raise RuntimeError(f'Invalid counter value in response ({resp[1]}) vs. the packet ({request[1]})')
-
-            if resp[0] == UARTDownload.DATA_TOKEN:
-                # Here's the data
-                size = int.from_bytes(self.port_read(2), 'little')
-                data = self.port_read(size)
-                crc = int.from_bytes(self.port_read(2), 'little')
-                if ab_crc16(data) != crc:
-                    # You can't redo it because the chip thinks it did send the data back successfully
-                    raise ValueError('Received data block CRC mismatch')
-                return data
-            elif resp[0] == UARTDownload.NACK_RESP:
-                # Failed, chip does not have any data block yet.
-                time.sleep(.05)
             else:
-                raise RuntimeError(f'Unexpected response token {resp[0]:02X}')
+                tries = 0
+
+            if resp == UARTDownload.DATA_TOKEN:
+                # Here's the data
+                try:
+                    # receive the data packet
+                    data = self._recv_data_payload()
+                except:
+                    # something failed, ask for data again.
+                    pass
+                else:
+                    # successful reception
+                    return data
+            elif resp == UARTDownload.RESP_NAK:
+                # Failed, chip does not have any data block yet.
+                continue
+            else:
+                raise RuntimeError(f'Rx: Unexpected response token {resp:02X}')
 
             tries += 1
-
-        raise TimeoutError('The chip did not any data packet to respond with')
