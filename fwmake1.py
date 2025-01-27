@@ -11,11 +11,11 @@ from pathlib import Path
 
 ap = argparse.ArgumentParser(description='Bluetrum Firmware Maker 1.0')
 
-ap.add_argument('-u', '--userkey', type=anyint,
+ap.add_argument('-u', '--userkey', metavar='KEY', type=anyint,
                 help='The "user key" (term may change in the future) to use for scrambling the code area'
                      ' (by default none is applied, code is scrambled using the generic way.)')
 
-ap.add_argument('-U', '--codekey', type=anyint,
+ap.add_argument('-U', '--codekey', metavar='KEY', type=anyint,
                 help='Direct assignment of the code key (instead of it being derived from the user key passed with the "-u" option above)')
 
 ap.add_argument('--no-res-scramble', action='store_false', dest='scramble_res',
