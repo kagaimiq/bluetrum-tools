@@ -10,27 +10,28 @@ from bluetrum.crc import ab_crc16
 def hexstr(s):
     return bytes.fromhex(s)
 
-ap = argparse.ArgumentParser(description='Generate the header.bin file (or a minimal boot image)')
+ap = argparse.ArgumentParser(description='Generate the header.bin file or a minimal bootable image')
 
 ap.add_argument('-b', '--bootable', action='store_true',
-                help='Generate a minimal bootable image instead of a partial header.bin file')
+                help='Generate a minimal bootable image instead of a header.bin file')
 
 ap.add_argument('--load-addr', type=anyint, default=0x10800, metavar='ADDR',
                 help='Load address (default: $%(default)04x)')
 
 ap.add_argument('--entry-addr', type=anyint,  metavar='ADDR',
-                help='Entry point (default is the same as load address)')
+                help='Entry point address, if not specified, it is set to the load address.')
 
 ap.add_argument('--offset', type=anyint, default=0x400, metavar='OFF',
                 help='Offset where the code is being put in the image (default: $%(default)04x)')
 
 ap.add_argument('--flags', type=anyint, default=0x0001,
                 help='Flag bits to put inside the header (default: %(default)04X)\n'
-                     '[bit0 = ?, bit2 = No CRC checks, bit3 = No scrambling]')
+                     '[bit0 = initialize clock system, bit1 = disable CRC checks, bit3 = do not scramble data]')
 
-ap.add_argument('--chipid', type=hexstr, default=b'PRAO\x01\x00\x00\x00',
-                help='Chip ID hex byte string (8-bytes) - default is for a [PRAO 1.0.0.0] chip.\n'
-                     'bytes 0-3 = chip ID (PRAO, CRWN, etc.); bytes 4-7 = version? (e.g. 01 00 00 00)')
+ap.add_argument('--chipid', type=hexstr, required=True,
+                help='Chip ID 8-byte hex byte string\n'
+                     'e.g. "5052414F01000000" specifies the "PRAO 1.0.0.0" (AB560x) chip.\n'
+                     'If this field is not set to a valid value for your chip, it won\'t boot the image!')
 
 ap.add_argument('input',
                 help='Input file')
@@ -58,8 +59,8 @@ elif code_offset % blocksize:
     print(f'Warning: the specified code offset is not a multiple of {blocksize}. Rounding up.')
     code_offset = align_to(code_offset, blocksize)
 
-scramb_data = (args.flags & 0x0008) == 0
-have_crcs   = (args.flags & 0x0002) == 0
+scramble_data      = (args.flags & 0x0008) == 0
+enable_checksums   = (args.flags & 0x0002) == 0
 
 #---------------------------------------------
 
@@ -89,21 +90,21 @@ struct.pack_into('<4s8sIIII', contents, 0,
     code_offset, len(code))
 
 if args.bootable:
-    if not scramb_data:
+    if not scramble_data:
         # well, we should at least have the first four bytes scrambled
         # where these flags live in...
         ab_lfsr_cipher_in(contents, 0, 4, MAGICKEY_LVMG)
 
-    if have_crcs:
+    if enable_checksums:
         # add CRCs
         struct.pack_into('<H', contents, 0x1c, code_crc)
         struct.pack_into('<H', contents, 0x3e, ab_crc16(contents[:0x3e]))
-    elif scramb_data:
+    elif scramble_data:
         # no place to store boot code CRC used for scrambling, blank it
         print('Asked to scramble the data while not requiring the CRCs to be populated - blanking the boot code CRC')
         code_crc = 0
 
-    if scramb_data:
+    if scramble_data:
         # scramble header
         ab_lfsr_cipher_in(contents, 0, 64, MAGICKEY_LVMG)
 
