@@ -64,7 +64,7 @@ class UARTDownload:
         recv = self.port_read(2)
         # check the counter value
         if recv[1] != self.counter:
-            return ValueError('Mismatch in the counter value of a received token ({recv[1]}) from expected ({self.counter})')
+            return ValueError(f'Mismatch in the counter value of a received token ({recv[1]}) from expected ({self.counter})')
         # return the received token value
         return recv[0]
 
