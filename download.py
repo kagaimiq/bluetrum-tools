@@ -29,7 +29,7 @@ if not have_uart and not have_scsi:
 
 ###############################################################################
 
-ap = argparse.ArgumentParser(description='Enter the bluetrum download mode and get basic info from the chip')
+ap = argparse.ArgumentParser(description='Tool to communicate with the bootloader in the Bluetrum chips.')
 
 if have_uart:
     ap.add_argument('--init-baud', type=int, default=115200,
@@ -66,40 +66,56 @@ args = ap.parse_args()
 
 ###############################################################################
 
-desblob = b64decode(
-    "bwAACP////////////////////////////////////////////////////////////////////"
-    "//////////////////////////////////////////////////////////////////////////"
-    "//////////////////////+3cm1vk4JiViMkUDSXAgAAk4JCZhcDAAATA8NlY/xiACOgAgAjog"
-    "IAI6QCACOmAgDBAu23lwIAAJOCwgQXAwAAEwNDY5MDw/9j+GICgyPANJPjAxAjJnA0IyZwNHET"
-    "IyZwNCMmcDQDLgMAgyOANLPDwwEjIHMAyb9vACAVAAAAAJnqHcUa/TcI8OG84IxSH/cpdem6+x"
-    "KMTl6VUindpScjimqlsyAJlRZGPFjIuB3ln39czmXDO7z5cROQIR4ILybaiW0O+IEH10OsLfhX"
-    "XotxapICQSyHMh6OkcvRjwCb/jdnZv/kO8sOmDyswCcQIPRQaInHj3L5OhBcuJqP92bo8IUfuR"
-    "zHVkmkXkmeqKk1ozE2C3c2pYSTDxBgk5fgxHLI1PDTLL2BgskVIBJfQIqwqPPecdwJNA/a2Opz"
-    "zAgB7LXSbcYR9/tAnQz+wizy5gqg1ZGUHqm/wdyeyvguU7DxZnTSOFSZwseusJ5VXiraYn646I"
-    "ocaTb+LhXt2LRh0qDV9gCK49cq7pwsjJqjza9wBHXYBCq9clv7cVHJuTFDSz1B3e4qdERxZhk3"
-    "nTh26016qjUxkiyRkADgk1D2hKkmMuUDOtjiDA+V9PrQWFLHnsggzxC/emeFhmkTjm8q4lVRTJ"
-    "U7bDqfhHnfW0y5v/puYxYhi9DXmkbv0LLXhFuyckjg4FLL/PtqK/WT9M2HeTMCISTBOsFxbt/W"
-    "TjKGypNwQ9lC7mfqOzQ2hBt+9s9vl5c/5PRtPgx7ND/n22+V8R9DgJcWo+QNQzqj97FWHAoFqi"
-    "FI84x3ENWAljgYBMD6TQX+Pg3W0Svw0KNGfIFI3mxxTVLaigKAN5I0sDSYiZkTOrvHiWw93w2p"
-    "wK0y8vFHOAXwwSw9EMKGzcaTATI+UWhIuj5/heoWnxgA0lVGDMtzYpNb/NQ2VoIQ6qpqHOfcbW"
-    "N1JKLnQW1fSpxx1AyaxYMyHkYriqTZxFoT+MfkgrReCnwap0QC4tj5oxwWl4A1wwzMiQpzfXH9"
-    "kfJyPRCIHjBtKq45MzWQeJinsa0pW7E7HGHQU8tYLaLFROCh/5SPDRX9xOkqDScwGLINyEVG8g"
-    "F0BE0UcO08mxcAxG31FmYusXm0TAzNU62sgpCy5+gT80rjVOoKznpCOdUG9oNHhwAR6DsGh55o"
-    "HH84SH+Q72ylD2khBUEBcpio/4dLOEQg9UrsNOUBA3OphgHVnuTCsimGr0zBUQZfQBIAO6S3xG"
-    "UynUDVBxHFcLb+Tjbwd9hyWUAUTRNw8rpHpB0/wp8VgT/H+dPeAF2DQoBvouH8voWOIefiwl0a"
-    "5bdYM7MDePHHXHHLsZz+25aw0xyqPtkBIL5w907NB3CIO3EyJ0x2/NsrtpAQIfDtB52UdlMvGT"
-    "1DWV3Ccx9Z58vzdNBDu0Jb8SzcjwJKPVWTpbqTa9MZMQAd+A0v1ZRpCNfsBH/JgfCRBKqThv4m"
-    "OXx5kIAaiFz223ze+96AvGV+JsusLtMxTvNPGERRdPvySGhRlLfGpWOwFv9uple0IDDDOseAiO"
-    "+gZHYoQTELwDwOnpgsLLjkorHsejPPAo8myPKfFXfpJ5001nqLzUmh098rz770YXmh9KaLDv7f"
-    "ARqRgWQkaIZbq0NvCwLjnAmFxFF6aJGvPGNBd4tsbimWQMIjNkNKxLBP9SPMn89faTAyBIyr7d"
-    "xxHFQiN/PSVMh6I5f/ukayt948k0BEALramUAS7Jim/tlJmp2wm3Vug3Q4z1aTZBVtvNCA/DoS"
-    "8T/7PksjY5gmbwwSD6e7j84RxAG3yUD3EMjyCbIM6KxyxAbW4nJf8sY/GUjo+9Xrrx/vNJoBx1"
-    "mBWb3j+r0WVA74VvKsU2NNTU1+8d9GVev45oj5bZo8Gq9VAP8LYnuTdSZOXuCUfAFpHCqieac1"
-    "MIJhU60HxWcKWu4QV22sLhaVSs+BvgGpuHPncM6Qa9NabKHaNp3W6AOTd/h/D5cRUxMWSHG3/z"
-    "IflnCwxVFwlkXKJ/0gTdLV4FzcwcHslQcdjBq2WRCBB5EmaY8fHxZMGidw4vTG5WGs7qsfAGrN"
-    "inOSlFe6TMcNUwMPc15ropuLqTO2meiicRQDd9zgW87DQKYm/lh6RaPsFxetpVW4TMhu4LVSbq"
-    "RjmQGE3v9ANEEeE+MI+jkGOyjiDSz24JQqtBIi37h5SuEYg9icX+uRWHfKMZkY02fK6IIxZwmW"
+dl_blob = b64decode(
+    "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"
 )
+
+#------------------------------------------------------------------------------
+
+class BlCmd:
+    IFACE_PARAM         = 0x50
+    MEM_READ            = 0x52
+    AUTHORIZE           = 0x55
+    MEM_WRITE           = 0x57
+    SET_CMD_HANDLER     = 0x58
+    GET_INFO            = 0x5A
+    REBOOT              = 0x5E
+
+class NitDlCmd:
+    INIT                = 0x00
+    DEV_READ            = 0x01
+    DEV_WRITE           = 0x02
+    DEV_ERASE           = 0x03
+
+
 
 def make_cb(cmd, arg1=0, arg2=0, arg3=0):
     # just the unscrambled CB is fine for now
@@ -107,46 +123,47 @@ def make_cb(cmd, arg1=0, arg2=0, arg3=0):
 
 def do_the_stuff(execcmd, blocksize, iface):
     # Query the information
-    resp = execcmd(make_cb(0x5A, arg1=0x5259414E, arg3=0x67ca), recv=24)
+    resp = execcmd(make_cb(BlCmd.GET_INFO, arg1=0x5259414E, arg3=0x67ca), recv=24)
     chipid, loadaddr, commskey, _ = struct.unpack('>12sIII', resp)
     print(f' Chip ID:       {chipid}')
     print(f' Load address:  ${loadaddr:08X}')
     print(f' Init. commkey: ${commskey:08X}')
 
     # Authorize
-    resp = execcmd(make_cb(0x55, arg1=ab_calckey(commskey)), recv=4)
+    resp = execcmd(make_cb(BlCmd.AUTHORIZE, arg1=ab_calckey(commskey)), recv=4)
     commskey, = struct.unpack('>I', resp)
     print(f' New commkey:   ${commskey:08X}')
 
     # Change baudrate (if it's UART)
     if iface == 'uart' and args.baud != args.init_baud:
         print(f'Changing baudrate to {args.baud} baud...')
-        execcmd(make_cb(0x50, arg1=args.baud, arg2=2), recv=2, switch_baud=args.baud)
+        # switch to a faster clock reference
+        execcmd(make_cb(BlCmd.IFACE_PARAM, arg2=0xf0), recv=2)
+        # change the baud rate
+        execcmd(make_cb(BlCmd.IFACE_PARAM, arg1=args.baud, arg2=0x02), recv=2, switch_baud=args.baud)
 
     # Load blob
-    data = bytearray(desblob) + b'\x00' * align_by(len(desblob), blocksize)
+    data = bytearray(dl_blob) + b'\x00' * align_by(len(dl_blob), blocksize)
     struct.pack_into('<12s4sI', data, 4,
                      chipid, iface.encode(), blocksize)
 
-    execcmd(make_cb(0x57, arg1=loadaddr, arg3=(len(data) // blocksize)), send=data)
-    execcmd(make_cb(0x58, arg1=loadaddr))
+    execcmd(make_cb(BlCmd.MEM_WRITE, arg1=loadaddr, arg3=(len(data) // blocksize)),send=data)
+    execcmd(make_cb(BlCmd.SET_CMD_HANDLER, arg1=loadaddr))
 
     # start!
-    btitle, codekey, flashid = struct.unpack('<16sI12s', execcmd(make_cb(0x00), recv=32))
-    print('- Title:', btitle)
-    print(f'- Code key: >>>>{codekey:08X}<<<<')
-    print('- Flash ID:', flashid.hex(' '), '...')
+    codekey, flashid, flashuid = struct.unpack('II16s', execcmd(make_cb(NitDlCmd.INIT), recv=48))
+    print(f'- Code key: >>>> {codekey:08X} <<<<')
+    print(f'- Flash device ID: {flashid:06X}')
+    print(f'- Flash unique ID: {flashuid.hex()}')
 
     # quick and dirty way of determining the flash size from its ID
-    density = flashid[2]
+    density = flashid & 0xff
     if density >= 0x10 and density <= 0x18:
         fsize = 1 << density
-        print(f'  - Flash size: {fsize} bytes')
+        print(f'- Flash size: {fsize} bytes')
     else:
         fsize = None
-        print('  - Could not determine flash size')
-
-
+        print(' - Unknown flash size')
 
     def do_dev_erase(addr, size):
         saddr = addr & ~0xFFF
@@ -162,7 +179,7 @@ def do_the_stuff(execcmd, blocksize, iface):
         try:
             addr = saddr
             while addr < eaddr:
-                if (eaddr-saddr) >= 0x10000 and (addr & 0xFFFF) == 0:
+                if (eaddr-addr) >= 0x10000 and (addr & 0xFFFF) == 0:
                     # big eraseblock (64k)
                     blksize = 0x10000
                     flags = 0x00
@@ -171,7 +188,7 @@ def do_the_stuff(execcmd, blocksize, iface):
                     blksize = 0x1000
                     flags = 0x02
 
-                execcmd(make_cb(0x03, arg1=addr, arg2=flags))
+                execcmd(make_cb(NitDlCmd.DEV_ERASE, arg1=addr, arg2=flags))
 
                 tq.update(blksize)
                 addr += blksize
@@ -179,8 +196,8 @@ def do_the_stuff(execcmd, blocksize, iface):
         finally:
             tq.close()
 
+    #--------------------------------------------------
 
-    # let's do stuff now!
     try:
         if args.action == 'erase':
             for i in range(0, len(args.areas), 2):
@@ -209,6 +226,10 @@ def do_the_stuff(execcmd, blocksize, iface):
                     if size <= 0:
                         raise ValueError('Address is out of range')
 
+                # we wouldn't have needed that if we just supported the UART bootloader
+                # and simply updated the progress on each transferred block, but since
+                # we need to support the USB bootloader as well, there is no possibility
+                # to the same thing except by doing short bursts at a time.
                 io_size = min(0x8000, max(blocksize, align_to(size // 100, blocksize)))
 
                 print(f'Reading {size} bytes from @{addr:06X} into "{path}"...')
@@ -221,7 +242,7 @@ def do_the_stuff(execcmd, blocksize, iface):
                         while done < size:
                             n = min(io_size, size-done)
 
-                            f.write(execcmd(make_cb(0x01, arg1=addr+done, arg3=n), recv=n))
+                            f.write(execcmd(make_cb(NitDlCmd.DEV_READ, arg1=addr+done, arg3=n), recv=n))
 
                             tq.update(n)
                             done += n
@@ -254,7 +275,7 @@ def do_the_stuff(execcmd, blocksize, iface):
                             while done < size:
                                 block = f.read(io_size)
 
-                                execcmd(make_cb(0x02, arg1=addr+done, arg3=len(block)), send=block)
+                                execcmd(make_cb(NitDlCmd.DEV_WRITE, arg1=addr+done, arg3=len(block)), send=block)
 
                                 tq.update(len(block))
                                 done += len(block)
@@ -270,52 +291,63 @@ def do_the_stuff(execcmd, blocksize, iface):
 
     if args.reboot:
         # finally, reboot the chip
-        execcmd(make_cb(0x5E))
+        execcmd(make_cb(BlCmd.REBOOT))
 
 ###############################################################################
 
-if args.port is not None:
+if have_uart and args.port is not None:
     with Serial(args.port) as port:
         udl = UARTDownload(port)
 
-        print('Trying to synchronize', end='')
+        print('Trying to synchronize.', end='')
 
         port.timeout = .01
 
         try:
             done = False
-            i = 0
+
+            num = 0
+            turn = 0
+
             while not done:
-                if (i % 10) == 0:
-                    print('.', flush=True, end='')
+                if num < 10:
+                    # send a sync pattern
+                    udl.port.reset_input_buffer()
+                    udl.port.write(UARTDownload.SYNC_TOKEN)
+                    while not done:
+                        recv = udl.port.read(4)
+                        if recv == b'': break
+                        if recv == UARTDownload.SYNC_RESP:
+                            done = True
 
-                    if (i % 20) == 0:
-                        # first try with the target baudrate - maybe the chip is already in?
-                        udl.port.baudrate = args.baud
-                    elif (i % 20) == 10:
-                        # then try with the initial baudrate.
+                    num += 1
+
+                else:
+                    print('.', end='', flush=True)
+
+                    if turn == 0:
+                        # send reset packet in initial baud rate
                         udl.port.baudrate = args.init_baud
+                        udl.send_reset(True)
+                        turn = 1
 
-                    udl.send_reset(True)
+                    elif turn == 1:
+                        # send reset packet in target baud rate
+                        udl.port.baudrate = args.baud
+                        udl.send_reset(True)
+                        udl.port.baudrate = args.init_baud
+                        turn = 0
 
-                udl.port.reset_input_buffer()
+                    num = 0
 
-                # send a sync pattern
-                udl.port.write(UARTDownload.SYNC_TOKEN)
-                while not done:
-                    recv = udl.port.read(4)
-                    if recv == b'': break
-                    if recv == UARTDownload.SYNC_RESP:
-                        done = True
+        except Exception as e:
+            print(' failed:')
+            raise e
 
-                i += 1
+        else:
+            print(' done.')
 
-        finally:
-            print()
-
-        print('Got it!')
-
-        port.timeout = .05
+        port.timeout = .1
 
         def execcmd(cb, send=None, recv=None, max_io=512, switch_baud=None):
             # first goes the command block
@@ -328,32 +360,30 @@ if args.port is not None:
             # transfer data
             if send is not None:
                 # send data blocks
-                done = 0
-                while done < len(send):
-                    rem = len(send) - done
-                    n = min(max_io, rem)
+                sent = 0
+                while sent < len(send):
+                    num = min(len(send) - sent, max_io)
 
-                    udl.send_packet(send[done : done+n])
-                    done += n
+                    udl.send_packet(send[sent : sent+num])
+                    sent += num
 
             elif recv is not None:
                 # receive data blocks
                 data = b''
                 while len(data) < recv:
-                    rem = recv - len(data)
-                    n = min(max_io, rem)
+                    num = min(recv - len(data), max_io)
 
                     block = udl.recv_packet()
                     data += block
 
-                    if len(block) != n:
+                    if len(block) != num:
                         break
 
                 return data
 
         do_the_stuff(execcmd, 512, 'uart')
 
-elif args.mscdev is not None:
+elif have_scsi and args.mscdev is not None:
     with SCSIDev(args.mscdev) as dev:
         def execcmd(cb, send=None, recv=None):
             if recv is not None:
