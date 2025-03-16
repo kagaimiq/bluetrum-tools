@@ -1,6 +1,6 @@
 # Bluetrum Tools
 
-Some tools for some obscure RISC-V bluetooth audio chips made by Bluetrum (the "AB"/"A3" branded chips).
+Some tools for some obscure RISC-V bluetooth audio chips made by Bluetrum (the "AB"/"A3" and "BT" branded chips).
 These ones seem to begin dominating the low-end previously held with chips made by companies such as JieLi or Buildwin.
 
 ## What's up
@@ -11,31 +11,33 @@ A simple tool that allows to read and write flash of an bluetrum chip.
 
 It supports both the USB and UART interfaces.
 
-For the USB interface it depends on the `scsiio` library which I have made myself and I haven't bothered making it a proper package so if you want you can rip it off [jl-uboot-tool](https://github.com/kagaimiq/jl-uboot-tool), however getting into the USB bootloader is a much more involved task than getting into the UART bootloader so you probably won't care about that one anyway.
+For the USB interface it depends on the `scsiio` library which I have made myself and I haven't bothered making it a proper package, so if you want that, you can find it in [jl-uboot-tool](https://github.com/kagaimiq/jl-uboot-tool), however getting into the USB bootloader is a much more involved task than getting into the UART bootloader so you probably won't care about that one anyway. ~ the UART bootloader works fine, and is easy to use anyway.
 
-For UART interface you just need an UART brigde and a way to mix the TX and RX signals together (this tool assumes any data sent over TX is also echoed back into RX), and possibly a way to shift the levels to 3.3v if it isn't by now.
-It depends on the `pyserial` package in order to talk with the serial port, so it must be installed for this option to become available.
+For the UART interface, it depends on the `pyserial` library to talk to the serial port.
 
-Then you just need to find an UART download pin (which is usually the PB3 GPIO; if your device has an USB port that is wired to the chip, it would be on the D+ pin), run the tool with an appropriate port specified, connect the UART to the chip, and then apply power to the chip.
+In terms of hardware, you need a 3.3v UART bridge adapter, where the TX and RX are being connected together (this tool assumes data sent over TX is echoed back on RX), the manufacturer suggested way of accomplishing that is to use a 200 Ohm resistor.
 
-The tool then should successfully sync with the chip and be able to talk with it:
+Then you need to find a UART download pin, from chip's point of view this is usually the `PB3` GPIO (usually wired out together with USB's D+ line aka `USB_DP`, so if your device happens to have a USB port, you can try that), also it's usually available on the `PA7` GPIO, and on some other pins depending on the specific chip you have, for example AB560x/PRAO chips can use the `VUSB` pin for that too.
+
+When you've done it correctly, the tool should be able to talk with the chip:
 
 ```
 $ python3 download.py --port /dev/ttyUSB0
-Trying to synchronize..
-Got it!
+Trying to synchronize... done.
  Chip ID:       b'BLUEPRAO\x01\x00\x00\x00'
  Load address:  $00012000
- Init. commkey: $54E0CD2F
- New commkey:   $B80D21C2
+ Init. commkey: $ECA4756B
+ New commkey:   $8D1814D7
 Changing baudrate to 921600 baud...
-- Title: b'dlblob ver 0.01\x00'
-- Code key: >>>>5C3CEDB4<<<<
-- Flash ID: 85 60 13 85 60 13 85 60 13 85 60 13 ...
-  - Flash size: 524288 bytes
+- Code key: >>>> 5C3CEDB4 <<<<
+- Flash device ID: 856013
+- Flash unique ID: 42503150363035060112b13847032078
+- Flash size: 524288 bytes
 ```
 
-If no action was specified, it will just print out some basic info like the chip ID and, if the code blob has successfully ran without any issues, the "code key" and the flash ID (with its size calculated in a naive way) would be also displayed.
+Currently the interface is rather limited, yet it's fully suitable for basic flash programming.
+
+If you don't specify an action, it's going to print out some bootloader info, and if the code blob has been executed correctly, the "code key" (key used for additional scrambling of the code blob in the firmware), the flash IDs (the JEDEC ID with opcode $9F and the unique ID with opcode $4B), and the calculated size of the flash.
 
 The `-r`/`--reboot` option can be used to reboot the chip after the tool has done doing its thing.
 
@@ -50,8 +52,8 @@ The `erase` operation takes one or more pairs of `<address> <size>` and erases a
 
 ----
 
-This tool has been tested only with the "PRAO" chips, so it's not guaranteed to work on other chips (with the code blob being a biggest concern).
-Also it assumes the chip has an SPI NOR flash chip attached internally to GPIOG, so no OTP chips, or an SPI NAND, I²C EEPROM or whatever might be on/with your chip.
+This tool has been tested only with the "PRAO" (AB560x series) chips, so it's not guaranteed to work on other chips (with the code blob being a biggest concern).
+Also it assumes the chip has an SPI NOR flash chip attached internally to GPIOG, so OTP chips, or an SPI NAND, I²C EEPROM or whatever might be on/with your chip, are out of question at the moment.
 
 ### fwunpack.py
 
@@ -89,9 +91,93 @@ Note that a proper resource blob is not automatically generated if you e.g. spec
 
 Makes the `header.bin` file (or a minimal bootable image, if such option has been provided with a `-b`/`--bootagle` flag).
 
+### mkresblob.py
+
+Makes the `res.bin` file containing resource files in the format used by the firmware.
+
+It takes either a directory (from which it will recursively scan files and add into the blob's flat structure) or a "layout file".
+
+## Extra info
+
+Here I'll put some 'useful' info until I find a proper place for them.
+
+### How to decipher the chip markings
+
+Let's say you have a chip that is marked as "PHSA15E2F".
+What does that mean?
+
+Look closely at the last five figures, in this example these are "15E2F".
+
+The first four figures are in fact the model number itself encoded in a hexidecimal form, so if you convert "15E2" to decimal you'll get "5602".
+And the last figure is the designation of a specific variation of the chip, in this case it is "F".
+
+So the actual model of the chip turns out to be "AB5602F". Where did the "AB" part come from?
+
+Well, you can judge it by the logo that your chip has. If it is "AB" (or "A3" depending on how you read it), that would be "AB".
+If it is "BT" (a letter 'B' with a tilted letter 'T' inside of it), that would be "BT".
+
+Let's take another example, "C1618C". What could *that* even mean?
+Here, it's basically the same thing as above, it's just the first three letters missing.
+With the same tricks as above, it turns out to be: "AB" + 0x1618 -> "5656" + "C" = "AB5656C".
+
+And just for the sake of it, what does "JHEB14F2C" mean? Once again, "AB" + 0x14F2 -> "5362" + "C" = "AB5362C".
+
+Here is the detailed breakdown of several known chip markings:
+
+```
+  .-----------. .------------. .-------------. .-------------.
+  |  CDDDDE   | |  ppnnnnEi  | |  ABBCDDDDE  | |  ppnnnnEi   |
+  |  xxxxxx   | |   CDDDDE   | |   xxxxxx    | |  ABBCDDDDE  |
+  '-----------' |   xxxxxx   | |    yyww     | |   xxxxxx    |
+                '------------' '-------------' |    yyww     |
+                                               '-------------' 
+
+A      = apparently the chip code name, e.g. 'P' = 'PRAO', 'C' = 'CRWN', 'E' = 'EPIC', 'J' = 'JAZZ', etc.
+BB     = unknown
+C      = unknown
+DDDD   = model number in hexadecimal form (e.g. "15E2" means 5602)
+E      = chip variant letter (A, B, C, D, etc.)
+
+xxxxxx = manufacturing code
+
+yy     = production year
+ww     = production week
+
+pp     = prefix (AB/BT)
+nnnn   = model number in decimal form (e.g. 8918)
+i      = flash density code (in Mbits), presumeably.
+```
+
+### Known code names
+
+Each chip design carries its own "code name", which, among other things, is reflected in the "chip ID" field in the bootloader protocol, and in the boot header.
+
+| Codename | Chips            |
+|----------|------------------|
+| CRWN     | AB530x / AB32VG1 |
+| DREM     |                  |
+| EPIC     | AB532x           |
+| GOAL     |                  |
+| HONR     | AB537x, AB535x(?) |
+| IDEA     |                  |
+| JAZZ     | AB536x           |
+| KING     |                  |
+| LUCK     |                  |
+| MAGI     |                  |
+| NOVA     | AB561x           |
+| OSCR     |                  |
+| ABLE     |                  |
+| PRAO     | AB560x           |
+| QUEN     | BT895x           |
+| RCKT     |                  |
+| SMAT     | AB563x, BT892x, BT891x(?) |
+| TYPC     |                  |
+| ZOOM     | AB571x           |
+| EAGR     | AB568x           |
+
 ## Resources
 
 - Bluetrum seemingly-official [GitHub](https://github.com/BLUETRUM) and [Gitee](https://gitee.com/Bluetrum) organizations
-  * Here you can find some resources for the "AB32VG1" chip (the CRWN/Crown chip), but really nothing else. (still better than nothing at all!)
+  * Here you can find some resources for the "AB32VG1" (aka AB5301A) chip.
 - [Their website](https://www.bluetrum.com/)
 - [Random SDK dump repo](https://github.com/ZhiqingLi/Sdk_Refresh) containing among other things, SDKs for the Bluetrum Crown (AB530x) and Epic (AB532x) chips.
